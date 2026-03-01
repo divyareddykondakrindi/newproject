@@ -1,4 +1,4 @@
-name: Deploy App to Server
+name: Deploy Node.js App to Server
 
 on:
   push:
@@ -9,34 +9,41 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
-    # Step 1: Checkout the repository
+    # Step 1: Checkout the repo
     - name: Checkout Repo
       uses: actions/checkout@v3
 
-    # Step 2: Set up Python (if Python app)
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    # Step 3: Install Python dependencies
-    - name: Install dependencies
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-    # OR Step 2/3 for Node.js
+    # Step 2: Set up Node.js
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '20'
-    - name: Install Node.js dependencies
-      run: npm install
 
-    # Step 4: Copy files / deploy to server using SSH
+    # Step 3: Detect subfolder and install dependencies
+    - name: Install dependencies
+      run: |
+        # Check if package.json exists in root
+        if [ -f package.json ]; then
+          echo "package.json found in root"
+          npm install
+        else
+          # Look for package.json in subfolders
+          FOLDER=$(find . -name "package.json" -exec dirname {} \;)
+          if [ -z "$FOLDER" ]; then
+            echo "Error: package.json not found anywhere"
+            exit 1
+          fi
+          echo "package.json found in $FOLDER"
+          cd "$FOLDER"
+          npm install
+        fi
+
+    # Step 4: Deploy to server via SSH
     - name: Deploy to Server
       uses: appleboy/ssh-action@v0.1.7
       with:
@@ -45,12 +52,16 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: 22
         script: |
+          # Go to the app folder on server
           cd ~/your-server-folder
           git pull origin main
-          # Python
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-          nohup python app.py &
-          # OR Node.js
-          # pm2 restart app || pm2 start app.js
+          # Detect folder with package.json on server
+          if [ -f package.json ]; then
+            echo "package.json found in root"
+          else
+            FOLDER=$(find . -name "package.json" -exec dirname {} \;)
+            cd "$FOLDER"
+          fi
+          # Install dependencies and restart app
+          npm install
+          pm2 restart app || pm2 start app.js --name app
