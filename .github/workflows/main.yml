@@ -1,0 +1,67 @@
+name: Deploy Node.js App to Server
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Step 1: Checkout the repo
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    # Step 2: Set up Node.js
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    # Step 3: Detect subfolder and install dependencies
+    - name: Install dependencies
+      run: |
+        # Check if package.json exists in root
+        if [ -f package.json ]; then
+          echo "package.json found in root"
+          npm install
+        else
+          # Look for package.json in subfolders
+          FOLDER=$(find . -name "package.json" -exec dirname {} \;)
+          if [ -z "$FOLDER" ]; then
+            echo "Error: package.json not found anywhere"
+            exit 1
+          fi
+          echo "package.json found in $FOLDER"
+          cd "$FOLDER"
+          npm install
+        fi
+
+    # Step 4: Deploy to server via SSH
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        script: |
+          # Go to the app folder on server
+          cd ~/your-server-folder
+          git pull origin main
+          # Detect folder with package.json on server
+          if [ -f package.json ]; then
+            echo "package.json found in root"
+          else
+            FOLDER=$(find . -name "package.json" -exec dirname {} \;)
+            cd "$FOLDER"
+          fi
+          # Install dependencies and restart app
+          npm install
+          pm2 restart app || pm2 start app.js --name app
