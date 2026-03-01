@@ -1,0 +1,56 @@
+name: Deploy App to Server
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    # Step 2: Set up Python (if Python app)
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    # Step 3: Install Python dependencies
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    # OR Step 2/3 for Node.js
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+    - name: Install Node.js dependencies
+      run: npm install
+
+    # Step 4: Copy files / deploy to server using SSH
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        script: |
+          cd ~/your-server-folder
+          git pull origin main
+          # Python
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          nohup python app.py &
+          # OR Node.js
+          # pm2 restart app || pm2 start app.js
